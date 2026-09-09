@@ -391,12 +391,12 @@ function main() {
     var imagedata = context.createImageData(w,h);
  
     // Define a rectangle in 2D with colors and coords at corners
-    var globals = { lightPos: new Vector(150,100,70),  // light over left upper rect
-                    lightCol: new Color(255,192,203)}; // light color
-    var tlAttribs = { diffuse: new Color(255,0,255)};    // all four rect verts blue
+    var globals = { lightPos: new Vector(150,100,40),  // light over left upper rect
+                    lightCol: new Color(255,0,255)}; // light color
+    var tlAttribs = { diffuse: new Color(0,0,255)};    // all four rect verts blue
     var trAttribs = { diffuse: new Color(0,0,255)};
     var brAttribs = { diffuse: new Color(0,0,255)};
-    var blAttribs = { diffuse: new Color(255,0,255)};
+    var blAttribs = { diffuse: new Color(0,0,255)};
     interpRect(imagedata,50,150,50,200,globals,tlAttribs,trAttribs,brAttribs,blAttribs);
     context.putImageData(imagedata,0,0); // display the image in the context
 } // end main
