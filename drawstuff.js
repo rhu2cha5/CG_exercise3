@@ -294,46 +294,26 @@ function drawPixel(imagedata,x,y,color) {
 function interpRect(imagedata,top,bottom,left,right,globals,tlAttribs,trAttribs,brAttribs,blAttribs) {
     
     // shade the pixel given pixel position and interp'd attribs
-    // assumes attribs contains "diffuse" and "specular" properties, each a Color object
+    // assumes attribs contains a "diffuse" property which is a Color object
     // assumes all other properties are floats
-    // modifies passed image data
-    // NEW: now computes ambient + diffuse + specular (Blinn-Phong) instead of diffuse only
+    // modifies pass image data
     function shadePixel(imagedata,pixX,pixY,globals,attribs) {
-        var outColor = new Color(0,0,0,255);
+        var difColor = new Color();
         var worldLoc = new Vector(pixX,pixY,0); // assume rect at z=0
-        var N = new Vector(0,0,1); // rect normal — rect lies flat in the xy plane
-
-        // --- light vector L: from surface point toward the light, normalized ---
-        var lVect = Vector.subtract(globals.lightPos,worldLoc);
+        var lVect = new Vector();
+        
+        // get light vector
+        lVect.copy(globals.lightPos);
+        lVect = Vector.subtract(lVect,worldLoc);
         lVect = Vector.normalize(lVect);
-        // clamp so a light "behind" the surface (dot < 0) contributes nothing,
-        // rather than subtracting light, which isn't physically meaningful
-        var NdotL = Math.max(0, Vector.dot(N,lVect));
-
-        // --- view vector V: from surface point toward the eye, normalized ---
-        var vVect = Vector.subtract(globals.eyePos,worldLoc);
-        vVect = Vector.normalize(vVect);
-
-        // --- half vector H: halfway between L and V (Blinn-Phong), normalized ---
-        var hVect = Vector.normalize(Vector.add(lVect,vVect));
-        var NdotH = Math.max(0, Vector.dot(N,hVect));
-        var specFactor = Math.pow(NdotH, globals.shininess);
-
-        // combine ambient + diffuse + specular, per channel (R, G, B)
-        // Ka*La + Kd*Ld*(N.L) + Ks*Ls*(N.H)^n  <-- straight from the Blinn-Phong equation
-        outColor.r = globals.ka * attribs.diffuse.r * (globals.ambientCol.r/255)
-                   + globals.kd * attribs.diffuse.r * (globals.lightCol.r/255) * NdotL
-                   + globals.ks * attribs.specular.r * (globals.lightCol.r/255) * specFactor;
-
-        outColor.g = globals.ka * attribs.diffuse.g * (globals.ambientCol.g/255)
-                   + globals.kd * attribs.diffuse.g * (globals.lightCol.g/255) * NdotL
-                   + globals.ks * attribs.specular.g * (globals.lightCol.g/255) * specFactor;
-
-        outColor.b = globals.ka * attribs.diffuse.b * (globals.ambientCol.b/255)
-                   + globals.kd * attribs.diffuse.b * (globals.lightCol.b/255) * NdotL
-                   + globals.ks * attribs.specular.b * (globals.lightCol.b/255) * specFactor;
-
-        drawPixel(imagedata,pixX,pixY,outColor);
+        var NdotL = Vector.dot(lVect,new Vector(0,0,1)); // rect in xy plane
+        
+        // calc diffuse color
+        difColor.r = attribs.diffuse.r * globals.lightCol.r/255 * NdotL;
+        difColor.g = attribs.diffuse.g * globals.lightCol.g/255 * NdotL;
+        difColor.b = attribs.diffuse.b * globals.lightCol.b/255 * NdotL;
+        
+        drawPixel(imagedata,pixX,pixY,difColor);
     } // end shade pixel
     
     try {
@@ -408,59 +388,15 @@ function main() {
     var context = canvas.getContext("2d");
     var w = context.canvas.width; // as set in html
     var h = context.canvas.height;  // as set in html
-
-    // Rectangle bounds (kept from the original)
-    var rectTop = 50, rectBottom = 150, rectLeft = 50, rectRight = 200;
-
-    // --- global lighting/viewing parameters ---
-    var globals = {
-        lightPos:  new Vector(100,100,50),   // will be animated, see below
-        lightCol:  new Color(255,255,255),   // white light
-        ambientCol: new Color(255,255,255),  // ambient light color (often same as light color)
-        eyePos:    new Vector(w/2, h/2, 300),// eye pulled back along +z, roughly centered over the rect
-        ka: 0.15,        // ambient coefficient
-        kd: 0.7,         // diffuse coefficient
-        ks: 0.4,         // specular coefficient
-        shininess: 16    // specular exponent — higher = smaller, tighter highlight
-    };
-
-    // Define a rectangle in 2D with diffuse AND specular colors at each corner.
-    // Specular is often left white/near-white regardless of the object's base
-    // color, since specular highlights are usually closer to the light's color.
-    function makeVertAttribs() {
-        return { diffuse: new Color(0,0,255), specular: new Color(255,255,255) };
-    }
-    var tlAttribs = makeVertAttribs();
-    var trAttribs = makeVertAttribs();
-    var brAttribs = makeVertAttribs();
-    var blAttribs = makeVertAttribs();
-
-    // --- animate the light moving closer to, and sweeping across, the rectangle ---
-    var startTime = null;
-
-    function frame(timestampMs) {
-        if (startTime === null) startTime = timestampMs;
-        var t = (timestampMs - startTime) / 1000; // seconds elapsed
-
-        // Sweep left-right across the rectangle's x-range (with a little overshoot)
-        var xCenter = (rectLeft + rectRight) / 2;
-        var xRange = (rectRight - rectLeft) / 2 + 40;
-        globals.lightPos.x = xCenter + xRange * Math.sin(t);       // sweep across
-        globals.lightPos.y = 100;
-
-        // Move closer over time (z decreases toward the rect at z=0), then
-        // ease back out and repeat — swap in any curve you like here.
-        var zFar = 120, zNear = 15;
-        globals.lightPos.z = zNear + (zFar - zNear) * (0.5 + 0.5*Math.cos(t*0.6));
-
-        // re-render this frame
-        var imagedata = context.createImageData(w,h);
-        interpRect(imagedata,rectTop,rectBottom,rectLeft,rectRight,globals,
-                   tlAttribs,trAttribs,brAttribs,blAttribs);
-        context.putImageData(imagedata,0,0);
-
-        requestAnimationFrame(frame);
-    } // end frame
-
-    requestAnimationFrame(frame);
+    var imagedata = context.createImageData(w,h);
+ 
+    // Define a rectangle in 2D with colors and coords at corners
+    var globals = { lightPos: new Vector(100,100,50),  // light over left upper rect
+                    lightCol: new Color(255,255,255)}; // light is white
+    var tlAttribs = { diffuse: new Color(0,0,255)};    // all four rect verts blue
+    var trAttribs = { diffuse: new Color(0,0,255)};
+    var brAttribs = { diffuse: new Color(0,0,255)};
+    var blAttribs = { diffuse: new Color(0,0,255)};
+    interpRect(imagedata,50,150,50,200,globals,tlAttribs,trAttribs,brAttribs,blAttribs);
+    context.putImageData(imagedata,0,0); // display the image in the context
 } // end main
